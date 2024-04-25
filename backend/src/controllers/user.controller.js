@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken"
 
 const registerUser = asyncHandler(async (req, res) => {
     //get details from frontend
@@ -78,16 +79,15 @@ const registerUser = asyncHandler(async (req, res) => {
 const generateAccessAndFreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId)
-        const refreshToken = user.generateRefreshToken()
-        const accessToken = user.generateAccessToken()
+        const refreshTokenPromise = user.generateRefreshToken()
+        const accessTokenPromise = user.generateAccessToken()
+
+        const accessToken = await accessTokenPromise;
+        const refreshToken = await refreshTokenPromise;
 
         user.refreshToken = refreshToken;
         await user.save({ validateBeforeSave: false })
 
-        console.log("ACCESS TOKEN INSIDE METHOD : ", accessToken)
-
-        // const realAccessToken = await accessToken;
-        // const realRefreshToken = await refreshToken;
         return { refreshToken, accessToken }
     } catch (error) {
         throw new ApiError(500, "Failed to generate refresh and access tokens")
@@ -132,20 +132,15 @@ const loginUser = asyncHandler(async (req, res) => {
         secure: false
     }
 
-    let realAccessToken = await accessToken;
-    let realRefreshToken = await refreshToken;
-
-
-    console.log("ACCESS TOKEN : ", realAccessToken)
     return res
         .status(200)
-        .cookie("accessToken", realAccessToken, options)
-        .cookie("refreshToken", realRefreshToken, options)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(
                 201,
                 {
-                    user: logginUser, accessToken: realAccessToken, refreshToken: realRefreshToken
+                    user: logginUser, accessToken: accessToken, refreshToken: refreshToken
                 },
                 "User loggedin successfully"
             )
@@ -183,5 +178,40 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 })
 
-export { registerUser, loginUser, logoutUser }
+const renewAccessToken = asyncHandler(async (req, res) => {
+    const inComingAccessToken = req.cookies?.accessToken || req.body?.accessToken
+    if (!inComingAccessToken) throw new ApiError(401, "Unauthorized request")
+
+    try {
+        const decodedToken = jwt.verify(inComingAccessToken, process.env.ACCESS_TOKEN_SECRET)
+
+        const user = await User.findById(decodedToken?._id)
+        if (!user) throw new ApiError(405, "Failed to find user with given token")
+
+        if (inComingAccessToken !== user.accessToken) throw new ApiError(403, "Token expired or used")
+
+        const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateAccessAndFreshTokens(user._id)
+
+        const options = {
+            httpOnly: true,
+            secure: false
+        }
+
+        return res
+            .status(200)
+            .cookie("accessToken", newAccessToken, options)
+            .cookie("refreshToken", newRefreshToken, options)
+            .json(
+                new ApiResponse(
+                    200,
+                    { accessToken: newAccessToken, refreshToken: newRefreshToken },
+                    "Access token is renewed successfully"
+                )
+            )
+    } catch (error) {
+        throw new ApiError(400, "Invalid token")
+    }
+})
+
+export { registerUser, loginUser, logoutUser, renewAccessToken }
 
