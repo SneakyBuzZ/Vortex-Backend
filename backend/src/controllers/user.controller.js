@@ -215,7 +215,43 @@ const renewAccessToken = asyncHandler(async (req, res) => {
     }
 })
 
+const changePassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword, confirmedNewPassword } = req.body
+
+    const userId = req.user?._id;
+    const user = await User.findById(userId).select("-refreshToken")
+
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+
+    if (!isPasswordCorrect) throw new ApiError(405, "Enter correct password")
 
 
-export { registerUser, loginUser, logoutUser, renewAccessToken }
+    if ((oldPassword === newPassword) && (oldPassword === confirmedNewPassword)) throw new ApiError(402, "Same password cannot be updated");
+    if (newPassword !== confirmedNewPassword) throw new ApiError(403, "Confirm password was incorrect");
+
+
+    user.password = confirmedNewPassword;
+    const isPasswordSaved = await user.save({ validateBeforeSave: false })
+
+    if (!isPasswordSaved) throw new ApiError(500, "Database couldn't saved new password")
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    previousPassword: oldPassword,
+                    currentPassword: user.password
+                },
+                "Password was successfully changed"
+            )
+        )
+})
+
+const getCurrentUser = asyncHandler(async (req, res) => {
+
+})
+
+export { registerUser, loginUser, logoutUser, renewAccessToken, changePassword, getCurrentUser }
 
