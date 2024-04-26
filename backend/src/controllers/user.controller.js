@@ -179,16 +179,18 @@ const logoutUser = asyncHandler(async (req, res) => {
 })
 
 const renewAccessToken = asyncHandler(async (req, res) => {
-    const inComingAccessToken = req.cookies?.accessToken || req.body?.accessToken
-    if (!inComingAccessToken) throw new ApiError(401, "Unauthorized request")
+    const inComingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken
+    if (!inComingRefreshToken) throw new ApiError(401, "Unauthorized request")
 
     try {
-        const decodedToken = jwt.verify(inComingAccessToken, process.env.ACCESS_TOKEN_SECRET)
+        const decodedToken = jwt.verify(inComingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
 
         const user = await User.findById(decodedToken?._id)
         if (!user) throw new ApiError(405, "Failed to find user with given token")
 
-        if (inComingAccessToken !== user.accessToken) throw new ApiError(403, "Token expired or used")
+        console.log("USER ACCESS TOKEN: ", user.refreshToken)
+
+        if (inComingRefreshToken !== user.refreshToken) throw new ApiError(403, "Token expired or used")
 
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateAccessAndFreshTokens(user._id)
 
@@ -212,6 +214,8 @@ const renewAccessToken = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid token")
     }
 })
+
+
 
 export { registerUser, loginUser, logoutUser, renewAccessToken }
 
