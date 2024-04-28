@@ -4,6 +4,7 @@ import { User } from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken"
+import mongoose from "mongoose";
 
 const registerUser = asyncHandler(async (req, res) => {
     //get details from frontend
@@ -362,5 +363,129 @@ const updateCoverImage = asyncHandler(async (req, res) => {
         )
 })
 
-export { registerUser, loginUser, logoutUser, renewAccessToken, changePassword, getCurrentUser, updateAccountDetails, updateAvatar, updateCoverImage }
+const getChannelDetails = asyncHandler(async (req, res) => {
+
+    const username = req.params?.username
+
+    if (!username.trim()) throw new ApiError(400, "Username is missing")
+
+    const channel = await User.aggregate([
+        {
+            $match: {
+                username: username?.toLowerCase().trim()
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "channel",
+                as: "subscribers"
+            }
+        },
+        {
+            $lookup: {
+                from: "subscriptions",
+                localField: "_id",
+                foreignField: "subscriber",
+                as: "subscribedTo"
+            }
+        },
+        {
+            $addFields: {
+                subscribersCount: {
+                    $size: "$subscribers"
+                },
+                subscribeToCount: {
+                    $size: "$subscribedTo"
+                }
+            }
+        },
+        {
+            $project: {
+                fullName: 1,
+                email: 1,
+                username: 1,
+                coverImage: 1,
+                avatar: 1,
+                subscribersCount: 1,
+                subscribeToCount: 1
+            }
+        }
+    ])
+
+    if (!channel?.length) throw new ApiError(400, "Channel doesnt not exists")
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                channel[0],
+                "Channel successfully fetched"
+            )
+        )
+})
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+    const userId = req.user?._id
+
+    const user = await User.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(userId)
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory",
+                foreignField: "owner",
+                as: "watchHistory",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        fullName: 1,
+                                        username: 1,
+                                        avatar: 1
+                                    }
+                                },
+                            ]
+                        },
+                    },
+                    {
+                        $addFields: {
+                            owner: {
+                                $first: "$owner"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    if (!user) throw new ApiError(500, "Failed to fetch watchHistory")
+
+
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                user[0].watchHistory,
+                "Watch history fetched successfully"
+            )
+        )
+})
+
+export { registerUser, loginUser, logoutUser, renewAccessToken, changePassword, getCurrentUser, updateAccountDetails, updateAvatar, updateCoverImage, getChannelDetails, getWatchHistory }
 
