@@ -1,7 +1,7 @@
 import { Router } from "express"
 import { upload } from "../middlewares/multer.middleware.js"
 import { verifyJwt } from "../middlewares/auth.middleware.js"
-import { getAllVideos, getVideoById, updateVideo, uploadVideo } from "../controllers/video.controller.js";
+import { deleteVideo, getAllVideos, getOwnerVideos, getVideoById, togglePublishStatus, updateVideo, uploadVideo } from "../controllers/video.controller.js";
 
 const videoRouter = Router();
 
@@ -21,7 +21,7 @@ videoRouter.route("/upload-video").post(
     uploadVideo
 )
 
-videoRouter.route("/vid/:videoId").get(getVideoById).post(
+videoRouter.route("/vid/:videoId").get(getVideoById).put(
     upload.fields([
         {
             name: "videoFile",
@@ -33,8 +33,10 @@ videoRouter.route("/vid/:videoId").get(getVideoById).post(
         }
     ]),
     updateVideo
-)
+).delete(deleteVideo).patch(togglePublishStatus)
 
-videoRouter.route("/all-videos").get(getAllVideos)
+videoRouter.route("/").get(getAllVideos)
+
+videoRouter.route("/owner").get(getOwnerVideos)
 
 export default videoRouter

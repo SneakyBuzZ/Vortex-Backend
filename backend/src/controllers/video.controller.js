@@ -54,6 +54,7 @@ const getVideoById = asyncHandler(async (req, res) => {
     const { videoId } = req.params
 
     const video = await Video.findById(videoId)
+    console.log("VIDEO IN GETVIDEOBYID: ", video)
     if (!video) throw new ApiError(400, "Video does not exist")
 
     return res
@@ -116,16 +117,124 @@ const updateVideo = asyncHandler(async (req, res) => {
         )
 })
 
-const getAllVideos = asyncHandler(async (req, res) => {
+const deleteVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+
+    await Video.findByIdAndDelete(videoId)
 
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                "all videos are fetched"
+                "Video deleted successfully"
             )
         )
 })
 
-export { getAllVideos, uploadVideo, getVideoById, updateVideo }        
+const togglePublishStatus = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+
+    const video = await Video.findById(videoId)
+
+    const updatedVideo = await Video.findByIdAndUpdate(
+        videoId,
+        {
+            $set: {
+                isPublished: !(video.isPublished)
+            }
+        },
+        {
+            new: true
+        }
+    )
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                updatedVideo.isPublished,
+                "Published status is toggled"
+            )
+        )
+
+})
+
+const getAllVideos = asyncHandler(async (req, res) => {
+
+    const { page = 1, limit = 10 } = req.query
+
+    const allVideos = await Video.find()
+        .skip((page - 1) * limit)
+        .limit(limit);
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                allVideos,
+                "All videos retrieved"
+            )
+        )
+})
+
+const getOwnerVideos = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, sortBy, sortType, userId } = req.query
+
+    const sort = {}
+    sort[sortBy] = Number(sortType)
+
+    const allOwnerVideos = await Video.aggregate([
+        {
+            $match: {
+                owner: new mongoose.Types.ObjectId(userId)
+            }
+        },
+        {
+            $sort: sort
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner"
+            }
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                owner: 1,
+                videoFile: 1,
+                thumbnail: 1,
+                duration: 1,
+                isPublished: 1,
+            }
+        }
+    ])
+
+    if (!allOwnerVideos) throw new ApiError(500, "Aggregation pipeline failed for owner videos")
+
+    const options = {
+        page: parseInt(page, 1),
+        limit: parseInt(limit, 10)
+    }
+
+    const paginatedOwnVideos = await Video.aggregatePaginate(allOwnerVideos, options)
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                paginatedOwnVideos.docs,
+                "Owner vidoes fetched successfully"
+            )
+        )
+
+})
+
+export { getAllVideos, uploadVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, getOwnerVideos }        
