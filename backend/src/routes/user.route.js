@@ -5,6 +5,7 @@ import { verifyJwt } from "../middlewares/auth.middleware.js"
 
 const userRouter = Router();
 
+//===================== AUTH ROUTES ==================
 userRouter.route("/register").post(
     upload.fields([
         {
@@ -20,7 +21,6 @@ userRouter.route("/register").post(
 )
 
 userRouter.route("/login").post(loginUser)
-
 
 
 //=============== SECURED ROUTES ===================
